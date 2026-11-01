@@ -1,5 +1,5 @@
 """
-Pinned `v0.2.0-artbot` (`3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781`) public API surface
+Pinned `v0.2.0-artbot` (`6c63513a9f92887aa13ddd7f562e82eb32e87873`) public API surface
 for hermetic Nix sandbox and CI execution when `../artbot/src` is not mounted.
 """
 

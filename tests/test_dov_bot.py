@@ -50,7 +50,7 @@ def test_package_version_and_upstream_pin(tmp_path: Path) -> None:
 
     pin = load_upstream_artbot_pin()
     assert pin["upstream_tag"] == "v0.2.0-artbot"
-    assert pin["upstream_commit"] == "3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781"
+    assert pin["upstream_commit"] == "6c63513a9f92887aa13ddd7f562e82eb32e87873"
 
     custom_pin = tmp_path / "custom_pin.json"
     custom_pin.write_text('{"upstream_tag": "v0.2.0-artbot"}', encoding="utf-8")

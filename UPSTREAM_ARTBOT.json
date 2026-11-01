@@ -2,7 +2,7 @@
   "upstream_repo": "https://github.com/InnodataAgenticResearch/artbot",
   "upstream_tag": "v0.2.0-artbot",
   "upstream_version": "0.2.0",
-  "upstream_commit": "3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781",
+  "upstream_commit": "6c63513a9f92887aa13ddd7f562e82eb32e87873",
   "public_api_allowlist": [
     "ArtbotConfig",
     "DirectoryPersonaResolver",

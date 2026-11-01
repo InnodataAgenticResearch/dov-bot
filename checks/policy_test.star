@@ -107,7 +107,7 @@ def test_upstream_artbot_pin_valid():
     asserts.eq(len(res_bad.findings), 4)
 
     res_good = testing.run(upstream_artbot_pin_valid, files = {
-        "UPSTREAM_ARTBOT.json": '{"upstream_repo": "https://github.com/InnodataAgenticResearch/artbot", "upstream_tag": "v0.2.0-artbot", "upstream_commit": "3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781", "public_api_allowlist": ["ArtbotConfig"]}\n',
+        "UPSTREAM_ARTBOT.json": '{"upstream_repo": "https://github.com/InnodataAgenticResearch/artbot", "upstream_tag": "v0.2.0-artbot", "upstream_commit": "6c63513a9f92887aa13ddd7f562e82eb32e87873", "public_api_allowlist": ["ArtbotConfig"]}\n',
     })
     asserts.eq(len(res_good.findings), 0)
 
@@ -123,7 +123,7 @@ def test_no_private_artbot_apis():
     )
 
     res_allowlist = testing.run(no_private_artbot_apis, files = {
-        "UPSTREAM_ARTBOT.json": '{"upstream_repo": "https://github.com/InnodataAgenticResearch/artbot", "upstream_tag": "v0.2.0-artbot", "upstream_commit": "3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781", "public_api_allowlist": ["ArtbotConfig", "HttpTransport"]}\n',
+        "UPSTREAM_ARTBOT.json": '{"upstream_repo": "https://github.com/InnodataAgenticResearch/artbot", "upstream_tag": "v0.2.0-artbot", "upstream_commit": "6c63513a9f92887aa13ddd7f562e82eb32e87873", "public_api_allowlist": ["ArtbotConfig", "HttpTransport"]}\n',
         "src/dov_bot/unlisted.py": "from artbot import ArtbotConfig, UnlistedSymbol\n",
         "src/dov_bot/good.py": "from artbot import ArtbotConfig, HttpTransport\n",
     })
