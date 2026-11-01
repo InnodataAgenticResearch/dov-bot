@@ -22,6 +22,8 @@ from typing import TextIO
 
 from dov_bot.analytics import (
     DovAnalyticsStore,
+    default_repo_root,
+    discover_default_repos,
     load_upstream_artbot_pin,
     seed_default_analytics,
 )
@@ -32,6 +34,7 @@ from dov_bot.bear_alarm import (
 )
 from dov_bot.linear_sync import (
     HttpTransport,
+    LinearIssue,
     LinearOverviewManager,
     default_linear_snapshot,
 )
@@ -97,6 +100,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     bear_cmd.add_argument("--summary", default="", help="Optional context summary.")
     bear_cmd.add_argument("--issue-id", default="INN-235", help="Associated Linear issue ID.")
+    bear_cmd.add_argument(
+        "--live",
+        action="store_true",
+        help="Fetch live Linear INN board snapshot to evaluate Bear Alarm urgency.",
+    )
+    bear_cmd.add_argument(
+        "--api-key",
+        default="",
+        help="Explicit Linear API key (overrides LINEAR_API_KEY environment variable).",
+    )
+    bear_cmd.add_argument(
+        "--workstream",
+        action="append",
+        default=[],
+        help="Active local workstream name to verify against the Linear board (repeatable).",
+    )
     bear_cmd.add_argument("--json", action="store_true", help="Emit JSON output.")
 
     vel_cmd = subparsers.add_parser(
@@ -119,6 +138,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional epic ID (e.g. INN-235) for deterministic ETA forecasting.",
     )
     vel_cmd.add_argument("--json", action="store_true", help="Emit JSON output.")
+
+    sync_cmd = subparsers.add_parser(
+        "sync-live",
+        help="Harvest live git repository coding-style profiles and Linear INN issues into SQLite.",
+    )
+    sync_cmd.add_argument(
+        "--db",
+        default="",
+        help="SQLite database path (default: <repo_root>/data/dov_analytics.db).",
+    )
+    sync_cmd.add_argument(
+        "--repo",
+        action="append",
+        default=[],
+        help="Local git repository path to harvest (repeatable; defaults to Innodata fleet repos).",
+    )
+    sync_cmd.add_argument(
+        "--api-key",
+        default="",
+        help="Explicit Linear API key (overrides LINEAR_API_KEY environment variable).",
+    )
+    sync_cmd.add_argument(
+        "--skip-linear",
+        action="store_true",
+        help="Harvest only local git repos and .beads without querying Linear API.",
+    )
+    sync_cmd.add_argument("--json", action="store_true", help="Emit JSON output.")
 
     linear_cmd = subparsers.add_parser(
         "audit-linear",
@@ -186,23 +232,91 @@ def main(
         return 0
 
     if args.command == "bear-check":
+        untracked = args.untracked
+        stale = args.stale
+        missing_overviews = args.missing_overviews
+        unowned_p0_p1 = args.unowned_p0_p1
+        summary = args.summary
+        if args.live:
+            api_key = (args.api_key or env.get("LINEAR_API_KEY", "")).strip()
+            if not api_key:
+                err.write("error: --live requires LINEAR_API_KEY or --api-key\n")
+                return 2
+            manager = LinearOverviewManager(api_key=api_key, transport=transport)
+            projects, members, issues = manager.fetch_team_snapshot()
+            report = manager.audit_board(
+                projects=projects,
+                members=members,
+                issues=issues,
+                active_local_workstreams=args.workstream,
+            )
+            untracked += sum(1 for f in report.findings if f.category == "untracked_active_work")
+            stale += sum(1 for f in report.findings if f.category == "stale_in_progress")
+            missing_overviews += sum(
+                1 for f in report.findings if f.category == "missing_project_overview"
+            )
+            unowned_p0_p1 += sum(
+                1 for f in report.findings if f.category == "unowned_high_priority"
+            )
+            if not summary:
+                summary = (
+                    f"Live INN board audit: {len(report.active_projects)} project(s), "
+                    f"{len(report.issues)} issue(s), {len(report.findings)} hygiene finding(s)"
+                )
+
         infra = args.infra_anomaly.strip() or None
         signal = BearSignalInput(
-            untracked_workstreams=args.untracked,
-            stale_in_progress_count=args.stale,
-            missing_overviews_count=args.missing_overviews,
+            untracked_workstreams=untracked,
+            stale_in_progress_count=stale,
+            missing_overviews_count=missing_overviews,
             active_blockers_count=args.blockers,
-            unowned_p0_p1_count=args.unowned_p0_p1,
+            unowned_p0_p1_count=unowned_p0_p1,
             broken_ci_pipelines=args.broken_ci,
             production_outage_or_5_alarm=bool(args.five_alarm),
             infra_vm_anomaly=infra,
-            summary=args.summary,
+            summary=summary,
         )
         assessment = evaluate_bear_urgency(signal, issue_id=args.issue_id)
         if args.json:
             out.write(json.dumps(dataclasses.asdict(assessment), indent=2, sort_keys=True) + "\n")
         else:
             out.write(assessment.formatted_message + "\n")
+        return 0
+
+    if args.command == "sync-live":
+        db_target = args.db or str(default_repo_root() / "data" / "dov_analytics.db")
+        repo_paths = [Path(r) for r in args.repo] if args.repo else discover_default_repos()
+        linear_issues: list[LinearIssue] = []
+        linear_projects_count = 0
+        if not args.skip_linear:
+            api_key = (args.api_key or env.get("LINEAR_API_KEY", "")).strip()
+            if not api_key:
+                err.write("error: sync-live requires LINEAR_API_KEY, --api-key, or --skip-linear\n")
+                return 2
+            manager = LinearOverviewManager(api_key=api_key, transport=transport)
+            projects, _, linear_issues = manager.fetch_team_snapshot()
+            linear_projects_count = len(projects)
+
+        store = DovAnalyticsStore(db_target)
+        try:
+            sync_summary = store.sync_live_data(
+                repo_paths=repo_paths,
+                linear_issues=linear_issues,
+                linear_projects_count=linear_projects_count,
+            )
+        finally:
+            store.close()
+
+        if args.json:
+            out.write(json.dumps(dataclasses.asdict(sync_summary), indent=2, sort_keys=True) + "\n")
+        else:
+            out.write(
+                f"Synced {len(sync_summary.repos_synced)} repositories "
+                f"({', '.join(sync_summary.repos_synced)}), "
+                f"{sync_summary.beads_records_synced} Beads record(s), "
+                f"{sync_summary.linear_projects_count} Linear project(s), and "
+                f"{sync_summary.linear_issues_synced} Linear issue(s) into {sync_summary.db_path}\n"
+            )
         return 0
 
     if args.command == "velocity-report":

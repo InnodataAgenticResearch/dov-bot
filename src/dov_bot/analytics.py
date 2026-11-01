@@ -13,13 +13,48 @@ Tracks:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
+import subprocess
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from dov_bot.linear_sync import LinearIssue
 
 PRIORITY_LEVELS: tuple[str, ...] = ("P0", "P1", "P2", "P3", "P4")
+DEFAULT_LOCAL_REPOS: tuple[str, ...] = (
+    "hermes_home",
+    "artbot",
+    "marketing-bot",
+    "dov-bot",
+    "rox-bot",
+    "jims-gym",
+)
+_SKIP_SCAN_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "build",
+        "dist",
+        "target",
+    }
+)
+_MOCK_USAGE_RE = re.compile(r"\b(?:unittest\.mock|from\s+unittest\s+import\s+mock)\b")
+_DI_FAKE_RE = re.compile(
+    r"\b(?:class\s+(?:Fake\w+|InMemory\w+)|class\s+\w+\(Protocol\)"
+    r"|shac\.test\.context|TemporaryDirectory)\b"
+)
 
 
 def default_repo_root() -> Path:
@@ -131,6 +166,248 @@ class EpicEtaForecast:
     estimated_remaining_hours: float
     estimated_completion_days: float
     confidence: str
+
+
+@dataclass(frozen=True)
+class LiveSyncSummary:
+    """Summary of a live repository, Beads, and Linear analytics harvest."""
+
+    db_path: str
+    repos_synced: tuple[str, ...]
+    beads_records_synced: int
+    linear_projects_count: int
+    linear_issues_synced: int
+
+
+def discover_default_repos(base_dir: Path | None = None) -> list[Path]:
+    """Return existing Innodata fleet repository directories under `base_dir`."""
+    root_parent = default_repo_root().parent if base_dir is None else base_dir
+    return [root_parent / name for name in DEFAULT_LOCAL_REPOS if (root_parent / name).is_dir()]
+
+
+def _run_git_command(args: Sequence[str], cwd: Path) -> str:
+    """Execute a read-only `git -C <cwd>` command and return stripped stdout."""
+    proc = subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def _normalize_remote_repo_name(remote_url: str, fallback_name: str) -> str:
+    """Normalize a Git remote URL into `Owner/Repo` (or `fallback_name` when absent)."""
+    cleaned = remote_url.strip().removesuffix(".git").rstrip("/")
+    if not cleaned:
+        return fallback_name
+    if ":" in cleaned and not cleaned.startswith(("http://", "https://", "ssh://")):
+        cleaned = cleaned.split(":", 1)[1]
+    parts = [p for p in cleaned.split("/") if p]
+    return f"{parts[-2]}/{parts[-1]}" if len(parts) >= 2 else parts[-1]
+
+
+def _infer_phase_from_title(title: str) -> str:
+    """Infer an engineering lifecycle phase from an issue or bead title."""
+    low = title.lower()
+    if any(k in low for k in ("scaffold", "establish", "bootstrap", "phase 1", "1.0")):
+        return "scaffolding"
+    if any(k in low for k in ("verify", "test", "check", "coverage", "qa", "audit")):
+        return "verification"
+    if any(k in low for k in ("deploy", "rollout", "sync", "fleet", "bridge")):
+        return "rollout"
+    return "implementation"
+
+
+def harvest_git_repo_profile(
+    repo_path: Path,
+    *,
+    recorded_at: str | None = None,
+    git_runner: Callable[[Sequence[str], Path], str] | None = None,
+) -> CodingStyleProfile:
+    """Harvest a live `CodingStyleProfile` from a local git repository checkout."""
+    runner = _run_git_command if git_runner is None else git_runner
+    ts_str = (
+        recorded_at if recorded_at is not None else datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
+    remote_url = runner(["config", "--get", "remote.origin.url"], repo_path)
+    repo_name = _normalize_remote_repo_name(remote_url, repo_path.resolve().name)
+
+    code_lines = 0
+    test_lines = 0
+    di_fakes_count = 0
+    mock_usage_count = 0
+    for path in sorted(repo_path.rglob("*")):
+        if not path.is_file() or path.suffix not in {".py", ".rs", ".star"}:
+            continue
+        rel_parts = path.relative_to(repo_path).parts
+        if any(part in _SKIP_SCAN_DIRS or part.startswith(".beads") for part in rel_parts):
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if path.suffix == ".rs" and "#[cfg(test)]" in text:
+            before, _, after = text.partition("#[cfg(test)]")
+            code_lines += len(before.splitlines())
+            test_lines += len(after.splitlines()) + 1
+        else:
+            line_count = len(text.splitlines())
+            is_test_file = (
+                "tests" in rel_parts
+                or path.name.startswith("test_")
+                or path.stem.endswith("_test")
+                or path.name in {"fakes.py", "conftest.py"}
+            )
+            if is_test_file:
+                test_lines += line_count
+                if path.suffix == ".py":
+                    mock_usage_count += len(_MOCK_USAGE_RE.findall(text))
+            else:
+                code_lines += line_count
+        di_fakes_count += len(_DI_FAKE_RE.findall(text))
+
+    test_to_code_ratio = round(test_lines / max(1, code_lines), 2)
+
+    log_text = runner(["log", "--format=COMMIT|%ct|%s", "--numstat"], repo_path)
+    commits: list[tuple[int, str, int]] = []
+    cur_ts = 0
+    cur_subj = ""
+    cur_lines = 0
+    has_cur = False
+    for raw_line in log_text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("COMMIT|"):
+            if has_cur:
+                commits.append((cur_ts, cur_subj, cur_lines))
+            _, ts_part, subj_part = line.split("|", 2)
+            cur_ts = int(ts_part)
+            cur_subj = subj_part
+            cur_lines = 0
+            has_cur = True
+        elif line and has_cur:
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                cur_lines += int(parts[0]) + int(parts[1])
+    if has_cur:
+        commits.append((cur_ts, cur_subj, cur_lines))
+
+    total_commits = len(commits)
+    avg_commit_lines = round(sum(c[2] for c in commits) / max(1, total_commits), 1)
+    timestamps = [c[0] for c in commits]
+    span_days = max(1.0, (max(timestamps) - min(timestamps)) / 86400.0) if timestamps else 1.0
+    scaf_commits = sum(
+        1
+        for _, subj, _ in commits
+        if any(
+            k in subj.lower()
+            for k in ("init", "scaffold", "establish", "bootstrap", "create", "add", "feat")
+        )
+    )
+    iter_commits = max(1, total_commits - scaf_commits) if total_commits > 0 else 0
+    sorted_ts = sorted(timestamps)
+    active_deltas = [
+        (sorted_ts[idx + 1] - sorted_ts[idx]) / 3600.0
+        for idx in range(len(sorted_ts) - 1)
+        if 0 < (sorted_ts[idx + 1] - sorted_ts[idx]) <= 86400
+    ]
+    avg_turnaround = (
+        round(max(0.2, sum(active_deltas) / len(active_deltas)), 2) if active_deltas else 1.2
+    )
+
+    return CodingStyleProfile(
+        repo_name=repo_name,
+        recorded_at=ts_str,
+        avg_commit_lines=avg_commit_lines,
+        test_to_code_ratio=test_to_code_ratio,
+        di_fakes_count=di_fakes_count,
+        mock_usage_count=mock_usage_count,
+        avg_pr_turnaround_hours=avg_turnaround,
+        scaffolding_commits_per_day=round(scaf_commits / span_days, 2),
+        iteration_commits_per_day=round(iter_commits / span_days, 2),
+    )
+
+
+def harvest_beads_jsonl(beads_path: Path) -> list[IssueCycleRecord]:
+    """Harvest local `.beads/issues.jsonl` records into `IssueCycleRecord` items."""
+    if not beads_path.is_file():
+        return []
+    records: list[IssueCycleRecord] = []
+    for raw_line in beads_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        item: dict[str, Any] = json.loads(line)
+        issue_id = str(item.get("id", "")).strip()
+        title = str(item.get("title", "")).strip()
+        prio_num = min(4, max(0, int(item.get("priority", 2))))
+        raw_status = str(item.get("status", "open")).strip().lower()
+        if raw_status == "closed":
+            status = "closed"
+        elif raw_status == "in_progress":
+            status = "in_progress"
+        else:
+            status = "open"
+        opened_at = str(item.get("created_at") or "2026-11-01T00:00:00Z")
+        updated_at = str(item["updated_at"]) if item.get("updated_at") else None
+        closed_at = (
+            str(item["closed_at"])
+            if item.get("closed_at")
+            else (updated_at if status == "closed" else None)
+        )
+        in_progress_at = updated_at if status in {"in_progress", "closed"} else None
+        epic_id = (
+            str(item["parent"])
+            if item.get("parent")
+            else (issue_id.rsplit(".", 1)[0] if "." in issue_id else issue_id)
+        )
+        owner = str(item["assignee"]) if item.get("assignee") else None
+        records.append(
+            IssueCycleRecord(
+                issue_id=issue_id,
+                source="beads",
+                title=title,
+                priority=f"P{prio_num}",
+                phase=_infer_phase_from_title(title),
+                status=status,
+                opened_at=opened_at,
+                in_progress_at=in_progress_at,
+                closed_at=closed_at,
+                epic_id=epic_id,
+                owner=owner,
+            )
+        )
+    return records
+
+
+def linear_issue_to_cycle_record(issue: LinearIssue) -> IssueCycleRecord:
+    """Convert a `LinearIssue` from the `INN` board into an `IssueCycleRecord`."""
+    prio_map = {1: "P0", 2: "P1", 3: "P2", 4: "P3"}
+    priority = prio_map.get(issue.priority, "P4")
+    if issue.is_closed:
+        status = "closed"
+    elif issue.state_name.strip().lower() in {"in progress", "in review", "started"}:
+        status = "in_progress"
+    else:
+        status = "open"
+    closed_at = issue.completed_at or (
+        (issue.updated_at or issue.created_at) if status == "closed" else None
+    )
+    in_progress_at = issue.started_at or (
+        issue.created_at if status in {"in_progress", "closed"} else None
+    )
+    epic_id = issue.parent_identifier or issue.project_name or issue.identifier
+    return IssueCycleRecord(
+        issue_id=issue.identifier,
+        source="linear",
+        title=issue.title,
+        priority=priority,
+        phase=_infer_phase_from_title(issue.title),
+        status=status,
+        opened_at=issue.created_at,
+        in_progress_at=in_progress_at,
+        closed_at=closed_at,
+        epic_id=epic_id,
+        owner=issue.assignee_name,
+    )
 
 
 class DovAnalyticsStore:
@@ -509,6 +786,45 @@ class DovAnalyticsStore:
             )
 
         return "\n".join(lines) + "\n"
+
+    def sync_live_data(
+        self,
+        *,
+        repo_paths: Sequence[Path],
+        linear_issues: Sequence[LinearIssue] = (),
+        linear_projects_count: int = 0,
+        recorded_at: str | None = None,
+        git_runner: Callable[[Sequence[str], Path], str] | None = None,
+    ) -> LiveSyncSummary:
+        """
+        Harvest live git repository profiles, local `.beads/issues.jsonl`, and Linear `INN` issues.
+        """
+        synced_repos: list[str] = []
+        beads_count = 0
+        for repo_path in repo_paths:
+            profile = harvest_git_repo_profile(
+                repo_path,
+                recorded_at=recorded_at,
+                git_runner=git_runner,
+            )
+            self.upsert_coding_style_profile(profile)
+            synced_repos.append(profile.repo_name)
+
+            beads_file = repo_path / ".beads" / "issues.jsonl"
+            for bead_rec in harvest_beads_jsonl(beads_file):
+                self.upsert_issue_record(bead_rec)
+                beads_count += 1
+
+        for lin_issue in linear_issues:
+            self.upsert_issue_record(linear_issue_to_cycle_record(lin_issue))
+
+        return LiveSyncSummary(
+            db_path=self.db_path,
+            repos_synced=tuple(synced_repos),
+            beads_records_synced=beads_count,
+            linear_projects_count=linear_projects_count,
+            linear_issues_synced=len(linear_issues),
+        )
 
 
 def seed_default_analytics(store: DovAnalyticsStore) -> None:

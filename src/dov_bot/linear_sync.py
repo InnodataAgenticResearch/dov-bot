@@ -12,6 +12,7 @@ team key `INN`, ID `829852d8-8a12-4875-93bd-5d1d1e08fe0b`):
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from collections.abc import Sequence
@@ -24,6 +25,13 @@ LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 INNODATA_TEAM_KEY = "INN"
 INNODATA_TEAM_ID = "829852d8-8a12-4875-93bd-5d1d1e08fe0b"
 INNODATA_TEAM_OVERVIEW_URL = "https://linear.app/innodata-ai/team/INN/overview"
+_BEADS_ID_RE = re.compile(r"\b(makor-[a-z0-9]+(?:\.[a-z0-9]+)*)\b", re.IGNORECASE)
+
+
+def extract_beads_id(text: str) -> str | None:
+    """Extract a `makor-*` Beads identifier from an issue title or description."""
+    match = _BEADS_ID_RE.search(text)
+    return match.group(1).lower() if match else None
 
 
 @dataclass(frozen=True)
@@ -140,6 +148,11 @@ class LinearIssue:
     project_name: str | None = None
     beads_id: str | None = None
     hours_since_update: float = 0.0
+    created_at: str = "2026-11-01T00:00:00Z"
+    started_at: str | None = None
+    completed_at: str | None = None
+    updated_at: str = ""
+    parent_identifier: str | None = None
 
     @property
     def is_closed(self) -> bool:
@@ -209,7 +222,7 @@ class LinearOverviewManager:
             members {
               nodes { id name email active }
             }
-            projects {
+            projects(first: 100) {
               nodes {
                 id
                 name
@@ -219,14 +232,21 @@ class LinearOverviewManager:
                 lead { name }
               }
             }
-            issues {
+            issues(first: 250) {
               nodes {
                 identifier
                 title
+                description
                 priority
+                createdAt
+                startedAt
+                completedAt
+                canceledAt
+                updatedAt
                 state { name }
                 assignee { name }
                 project { name }
+                parent { identifier }
               }
             }
           }
@@ -277,16 +297,33 @@ class LinearOverviewManager:
             state_obj = item.get("state") or {}
             assignee_obj = item.get("assignee") or {}
             project_obj = item.get("project") or {}
+            parent_obj = item.get("parent") or {}
+            title_str = str(item.get("title", ""))
+            desc_str = str(item.get("description") or "")
+            explicit_bead = str(item["beadsId"]) if item.get("beadsId") else None
+            inferred_bead = explicit_bead or extract_beads_id(f"{title_str} {desc_str}")
+            created_str = str(item.get("createdAt") or "2026-11-01T00:00:00Z")
+            started_str = str(item["startedAt"]) if item.get("startedAt") else None
+            done_raw = item.get("completedAt") or item.get("canceledAt")
+            completed_str = str(done_raw) if done_raw else None
+            updated_str = str(item.get("updatedAt") or "")
             issues.append(
                 LinearIssue(
                     identifier=str(item.get("identifier", "")),
-                    title=str(item.get("title", "")),
+                    title=title_str,
                     state_name=str(state_obj.get("name", "Todo")),
                     priority=int(item.get("priority", 0)),
                     assignee_name=str(assignee_obj["name"]) if assignee_obj.get("name") else None,
                     project_name=str(project_obj["name"]) if project_obj.get("name") else None,
-                    beads_id=str(item["beadsId"]) if item.get("beadsId") else None,
+                    beads_id=inferred_bead,
                     hours_since_update=float(item.get("hoursSinceUpdate", 0.0)),
+                    created_at=created_str,
+                    started_at=started_str,
+                    completed_at=completed_str,
+                    updated_at=updated_str,
+                    parent_identifier=str(parent_obj["identifier"])
+                    if parent_obj.get("identifier")
+                    else None,
                 )
             )
 
@@ -320,10 +357,16 @@ class LinearOverviewManager:
                     )
                 )
 
-        corpus = " ".join([p.name.lower() for p in projects] + [i.title.lower() for i in issues])
+        corpus = " ".join(
+            [p.name.lower() for p in projects]
+            + [p.overview_markdown.lower() for p in projects]
+            + [i.title.lower() for i in issues]
+        )
+        compact_corpus = re.sub(r"[\s_-]+", "", corpus)
         for ws in active_local_workstreams:
             clean_ws = ws.strip()
-            if clean_ws and clean_ws.lower() not in corpus:
+            compact_ws = re.sub(r"[\s_-]+", "", clean_ws.lower())
+            if clean_ws and clean_ws.lower() not in corpus and compact_ws not in compact_corpus:
                 findings.append(
                     BoardAuditFinding(
                         category="untracked_active_work",

@@ -3,14 +3,20 @@ Dov-Bot (Custom ArtBOT): Dov (The Bear) — Google L6 Technical Program Manager 
 """
 
 from dov_bot.analytics import (
+    DEFAULT_LOCAL_REPOS,
     PRIORITY_LEVELS,
     CodingStyleProfile,
     DovAnalyticsStore,
     EpicEtaForecast,
     IssueCycleRecord,
+    LiveSyncSummary,
     VelocitySummary,
     default_repo_root,
     default_upstream_pin_path,
+    discover_default_repos,
+    harvest_beads_jsonl,
+    harvest_git_repo_profile,
+    linear_issue_to_cycle_record,
     load_upstream_artbot_pin,
     seed_default_analytics,
 )
@@ -41,6 +47,7 @@ from dov_bot.linear_sync import (
     LinearProject,
     UrllibHttpTransport,
     default_linear_snapshot,
+    extract_beads_id,
 )
 
 __version__ = "0.1.0"
@@ -49,6 +56,7 @@ __all__ = [
     "BEAR_EMOJI",
     "BEAR_LEVEL_LABELS",
     "BEAR_REQUIRED_ACTIONS",
+    "DEFAULT_LOCAL_REPOS",
     "INNODATA_TEAM_ID",
     "INNODATA_TEAM_KEY",
     "INNODATA_TEAM_OVERVIEW_URL",
@@ -68,6 +76,7 @@ __all__ = [
     "LinearMember",
     "LinearOverviewManager",
     "LinearProject",
+    "LiveSyncSummary",
     "UrllibHttpTransport",
     "VelocitySummary",
     "__version__",
@@ -75,9 +84,14 @@ __all__ = [
     "default_linear_snapshot",
     "default_repo_root",
     "default_upstream_pin_path",
+    "discover_default_repos",
     "evaluate_bear_urgency",
+    "extract_beads_id",
     "format_rox_bot_handoff",
+    "harvest_beads_jsonl",
+    "harvest_git_repo_profile",
     "ingest_rox_bot_anomaly",
+    "linear_issue_to_cycle_record",
     "load_upstream_artbot_pin",
     "main",
     "render_bear_help_page",

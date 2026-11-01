@@ -18,15 +18,21 @@ from dov_bot import (
     CodingStyleProfile,
     DovAnalyticsStore,
     IssueCycleRecord,
+    LinearIssue,
     LinearOverviewManager,
     UrllibHttpTransport,
     __version__,
     default_linear_snapshot,
     default_repo_root,
     default_upstream_pin_path,
+    discover_default_repos,
     evaluate_bear_urgency,
+    extract_beads_id,
     format_rox_bot_handoff,
+    harvest_beads_jsonl,
+    harvest_git_repo_profile,
     ingest_rox_bot_anomaly,
+    linear_issue_to_cycle_record,
     load_upstream_artbot_pin,
     main,
     render_bear_help_page,
@@ -567,3 +573,317 @@ def test_cli_all_subcommands(tmp_path: Path) -> None:
         == 0
     )
     assert "Innodata (INN)" in out_live.getvalue()
+
+
+def test_harvest_git_repo_beads_and_linear_conversion(tmp_path: Path) -> None:
+    # 1. Real git repo harvest on default_repo_root()
+    real_profile = harvest_git_repo_profile(default_repo_root())
+    assert real_profile.repo_name.endswith("dov-bot")
+    assert real_profile.di_fakes_count >= 1
+    assert real_profile.mock_usage_count == 0
+
+    # 2. Non-git directory with _run_git_command (covers non-zero git exit fallback)
+    non_git_dir = tmp_path / "plain-dir"
+    non_git_dir.mkdir()
+    plain_profile = harvest_git_repo_profile(non_git_dir, recorded_at="2026-11-01T12:00:00Z")
+    assert plain_profile.repo_name == "plain-dir"
+
+    # 3. Synthetic repo covering Rust #[cfg(test)], Starlark, Python, ignored dirs, SSH remote
+    synth_repo = tmp_path / "synth-repo"
+    (synth_repo / "src").mkdir(parents=True)
+    (synth_repo / "tests").mkdir(parents=True)
+    (synth_repo / ".venv").mkdir(parents=True)
+    (synth_repo / ".beads").mkdir(parents=True)
+
+    (synth_repo / "src" / "app.py").write_text(
+        "class Service(Protocol):\n    pass\n",
+        encoding="utf-8",
+    )
+    (synth_repo / "src" / "lib.rs").write_text(
+        "pub fn add(a: i32, b: i32) -> i32 { a + b }\n"
+        "#[cfg(test)]\n"
+        "mod tests {\n    #[test]\n    fn it_works() {}\n}\n",
+        encoding="utf-8",
+    )
+    (synth_repo / "src" / "plain.rs").write_text(
+        "pub fn noop() {}\n",
+        encoding="utf-8",
+    )
+    (synth_repo / "tests" / "test_app.py").write_text(
+        "import " + "unittest" + ".mock\nclass FakeService:\n    pass\n",
+        encoding="utf-8",
+    )
+    (synth_repo / "tests" / "policy_test.star").write_text(
+        "shac.test.context()\n",
+        encoding="utf-8",
+    )
+    (synth_repo / ".venv" / "ignored.py").write_text("x = 1\n", encoding="utf-8")
+    (synth_repo / "README.md").write_text("# Synth\n", encoding="utf-8")
+
+    def fake_git_runner(args: object, cwd: Path) -> str:
+        cmd = list(args) if isinstance(args, (list, tuple)) else []
+        if "remote.origin.url" in cmd:
+            return "git@github.com:InnodataAgenticResearch/synth-repo.git"
+        return (
+            "COMMIT|1700003600|feat: scaffold initial repo\n"
+            "120\t30\tsrc/app.py\n"
+            "-\t-\tbinary.dat\n"
+            "\n"
+            "COMMIT|1700000000|fix: tighten validation\n"
+            "20\t10\tsrc/lib.rs\n"
+        )
+
+    synth_profile = harvest_git_repo_profile(
+        synth_repo,
+        recorded_at="2026-11-01T12:00:00Z",
+        git_runner=fake_git_runner,
+    )
+    assert synth_profile.repo_name == "InnodataAgenticResearch/synth-repo"
+    assert synth_profile.mock_usage_count == 1
+    assert synth_profile.di_fakes_count >= 2
+    assert synth_profile.avg_commit_lines == 90.0
+    assert synth_profile.avg_pr_turnaround_hours == 1.0
+
+    # Single-token remote URL edge case
+    single_token_profile = harvest_git_repo_profile(
+        non_git_dir,
+        recorded_at="2026-11-01T12:00:00Z",
+        git_runner=lambda args, cwd: "single-repo.git" if "remote.origin.url" in args else "",
+    )
+    assert single_token_profile.repo_name == "single-repo"
+
+    # 4. harvest_beads_jsonl (missing file + open/in_progress/closed/blank line)
+    assert harvest_beads_jsonl(tmp_path / "does-not-exist.jsonl") == []
+    beads_path = synth_repo / ".beads" / "issues.jsonl"
+    beads_path.write_text(
+        "\n"
+        + json.dumps(
+            {
+                "id": "makor-1.1",
+                "title": "Bootstrap Phase 1 repo",
+                "priority": 0,
+                "status": "closed",
+                "created_at": "2026-11-01T00:00:00Z",
+                "updated_at": "2026-11-01T02:00:00Z",
+                "closed_at": None,
+                "parent": None,
+                "assignee": "Danny Rosen",
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "id": "makor-2",
+                "title": "Verify coverage gates",
+                "priority": 1,
+                "status": "in_progress",
+                "created_at": "2026-11-01T01:00:00Z",
+                "updated_at": "2026-11-01T01:30:00Z",
+                "parent": "makor-root",
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "id": "makor-3",
+                "title": "Deploy fleet rollout",
+                "priority": 2,
+                "status": "open",
+                "created_at": "2026-11-01T01:00:00Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    bead_records = harvest_beads_jsonl(beads_path)
+    assert len(bead_records) == 3
+    assert bead_records[0].phase == "scaffolding"
+    assert bead_records[0].epic_id == "makor-1"
+    assert bead_records[1].phase == "verification"
+    assert bead_records[1].status == "in_progress"
+    assert bead_records[2].phase == "rollout"
+    assert bead_records[2].status == "open"
+
+    # 5. linear_issue_to_cycle_record & extract_beads_id
+    assert extract_beads_id("[makor-tq2.3.1] Add fleet") == "makor-tq2.3.1"
+    assert extract_beads_id("No bead here") is None
+
+    lin_issue_closed = LinearIssue(
+        identifier="INN-200",
+        title="Implement core parser",
+        state_name="Done",
+        priority=2,
+        assignee_name="Danny Rosen",
+        project_name="Core",
+        created_at="2026-11-01T00:00:00Z",
+        updated_at="2026-11-01T03:00:00Z",
+    )
+    lin_closed = linear_issue_to_cycle_record(lin_issue_closed)
+    assert lin_closed.status == "closed"
+    assert lin_closed.phase == "implementation"
+    assert lin_closed.priority == "P1"
+
+    lin_issue_in_prog = LinearIssue(
+        identifier="INN-201",
+        title="Verify tests",
+        state_name="In Review",
+        priority=1,
+        parent_identifier="INN-200",
+        started_at="2026-11-01T01:00:00Z",
+    )
+    lin_in_prog = linear_issue_to_cycle_record(lin_issue_in_prog)
+    assert lin_in_prog.status == "in_progress"
+    assert lin_in_prog.epic_id == "INN-200"
+
+    lin_issue_open = LinearIssue(
+        identifier="INN-202",
+        title="Backlog item",
+        state_name="Todo",
+        priority=0,
+    )
+    lin_open = linear_issue_to_cycle_record(lin_issue_open)
+    assert lin_open.status == "open"
+    assert lin_open.priority == "P4"
+
+    # 6. discover_default_repos & store.sync_live_data
+    base_repos = tmp_path / "fleet"
+    (base_repos / "dov-bot").mkdir(parents=True)
+    discovered = discover_default_repos(base_repos)
+    assert discovered == [base_repos / "dov-bot"]
+    assert isinstance(discover_default_repos(), list)
+
+    store = DovAnalyticsStore(":memory:")
+    try:
+        sync_res = store.sync_live_data(
+            repo_paths=[synth_repo],
+            linear_issues=[lin_issue_closed, lin_issue_in_prog, lin_issue_open],
+            linear_projects_count=2,
+            recorded_at="2026-11-01T12:00:00Z",
+            git_runner=fake_git_runner,
+        )
+        assert sync_res.repos_synced == ("InnodataAgenticResearch/synth-repo",)
+        assert sync_res.beads_records_synced == 3
+        assert sync_res.linear_issues_synced == 3
+        assert len(store.list_issue_records()) == 6
+    finally:
+        store.close()
+
+
+def test_cli_sync_live_and_bear_check_live(tmp_path: Path) -> None:
+    repo_dir = tmp_path / "dov-bot"
+    repo_dir.mkdir()
+    db_file = tmp_path / "live.db"
+
+    # 1. sync-live missing LINEAR_API_KEY without --skip-linear returns 2
+    err_sync = io.StringIO()
+    assert (
+        main(
+            ["sync-live", "--db", str(db_file), "--repo", str(repo_dir)],
+            environ={},
+            stderr=err_sync,
+        )
+        == 2
+    )
+    assert "requires LINEAR_API_KEY" in err_sync.getvalue()
+
+    # 2. sync-live --skip-linear (text output)
+    out_skip = io.StringIO()
+    assert (
+        main(
+            [
+                "sync-live",
+                "--db",
+                str(db_file),
+                "--repo",
+                str(repo_dir),
+                "--skip-linear",
+            ],
+            stdout=out_skip,
+        )
+        == 0
+    )
+    assert "Synced 1 repositories" in out_skip.getvalue()
+
+    # 3. sync-live with FakeHttpTransport & --json (and default repo discovery)
+    fake = FakeHttpTransport()
+    fake.queue_post_response(
+        200,
+        json.dumps(
+            {
+                "data": {
+                    "team": {
+                        "id": INNODATA_TEAM_ID,
+                        "key": INNODATA_TEAM_KEY,
+                        "members": {"nodes": []},
+                        "projects": {"nodes": [{"id": "p1", "name": "ArtBOT", "state": "started"}]},
+                        "issues": {
+                            "nodes": [
+                                {
+                                    "identifier": "INN-250",
+                                    "title": "[makor-c4s.1] Phase 1: Scaffold",
+                                    "description": "Linked to makor-c4s.1",
+                                    "priority": 1,
+                                    "createdAt": "2026-11-01T00:00:00Z",
+                                    "startedAt": "2026-11-01T01:00:00Z",
+                                    "completedAt": "2026-11-01T02:00:00Z",
+                                    "updatedAt": "2026-11-01T02:00:00Z",
+                                    "state": {"name": "Done"},
+                                    "assignee": {"name": "Danny Rosen"},
+                                    "project": {"name": "ArtBOT"},
+                                    "parent": {"identifier": "INN-249"},
+                                }
+                            ]
+                        },
+                    }
+                }
+            }
+        ),
+    )
+    out_sync_json = io.StringIO()
+    assert (
+        main(
+            ["sync-live", "--db", str(db_file), "--api-key", "lin_key", "--json"],
+            transport=fake,
+            stdout=out_sync_json,
+        )
+        == 0
+    )
+    sync_payload = json.loads(out_sync_json.getvalue())
+    assert sync_payload["linear_issues_synced"] == 1
+    assert sync_payload["linear_projects_count"] == 1
+
+    # 4. bear-check --live missing API key returns 2
+    err_bear_live = io.StringIO()
+    assert main(["bear-check", "--live"], environ={}, stderr=err_bear_live) == 2
+    assert "requires LINEAR_API_KEY" in err_bear_live.getvalue()
+
+    # 5. bear-check --live with FakeHttpTransport (default summary and custom summary)
+    for extra_args in ([], ["--summary", "Custom live summary"]):
+        fake.queue_post_response(
+            200,
+            json.dumps(
+                {
+                    "data": {
+                        "team": {
+                            "id": INNODATA_TEAM_ID,
+                            "key": INNODATA_TEAM_KEY,
+                            "members": {"nodes": []},
+                            "projects": {
+                                "nodes": [{"id": "p1", "name": "ArtBOT", "state": "started"}]
+                            },
+                            "issues": {"nodes": []},
+                        }
+                    }
+                }
+            ),
+        )
+        out_bear_live = io.StringIO()
+        assert (
+            main(
+                ["bear-check", "--live", "--api-key", "lin_key", *extra_args],
+                transport=fake,
+                stdout=out_bear_live,
+            )
+            == 0
+        )
+        assert "Bear(s)" in out_bear_live.getvalue()
