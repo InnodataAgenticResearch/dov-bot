@@ -1,0 +1,30 @@
+diff --git a/internal/sandbox/sandbox.go b/internal/sandbox/sandbox.go
+index d1e923a..637e18b 100644
+--- a/internal/sandbox/sandbox.go
++++ b/internal/sandbox/sandbox.go
+@@ -65,7 +65,7 @@ type Sandbox interface {
+ 
+ // New constructs a platform-appropriate sandbox.
+ func New(tempDir string) (Sandbox, error) {
+-	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") && canUseNsjail("/proc/self/setgroups") {
++	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") && canUseNsjail("/proc/self/setgroups") && !userNamespacesRestricted("/proc/sys/kernel/apparmor_restrict_unprivileged_userns") {
+ 		execsupport.Mu.Lock()
+ 		defer execsupport.Mu.Unlock()
+ 		nsjailPath := filepath.Join(tempDir, "nsjail")
+@@ -95,6 +95,16 @@ func New(tempDir string) (Sandbox, error) {
+ 	return genericSandbox{}, nil
+ }
+ 
++// userNamespacesRestricted reports whether AppArmor blocks unprivileged user
++// namespaces (Ubuntu 24.04+ default: kernel.apparmor_restrict_unprivileged_userns=1).
++// nsjail then fails with "mount('/', '/', ...): Permission denied", so shac
++// falls back to genericSandbox, as it does when /proc is read-only.
++func userNamespacesRestricted(sysctlPath string) bool {
++	//#nosec G304
++	b, err := os.ReadFile(sysctlPath)
++	return err == nil && strings.TrimSpace(string(b)) == "1"
++}
++
+ // canUseNsjail reports whether the current process environment supports
+ // launching nsjail. When shac runs inside an outer sandbox or container that
+ // mounts /proc read-only (such as Fuchsia's testrunner nsjail) or omits /proc,

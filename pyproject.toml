@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dov-bot"
+version = "0.1.0"
+description = "Dov-Bot (Custom ArtBOT): Dov (The Bear) — Google L6 Technical Program Manager, Linear Board Auditor, Velocity Forecaster, and 0-to-5 Bear Alarm Protocol"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+dov-bot = "dov_bot.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+files = ["src", "tests"]
+explicit_package_bases = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+addopts = "-p randomly --cov=dov_bot --cov-branch --cov-report=term-missing --cov-fail-under=100"
+
+[tool.coverage.run]
+branch = true
+source = ["dov_bot"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true

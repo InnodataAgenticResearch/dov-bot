@@ -1,0 +1,70 @@
+name: ci
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: Format, Lint, Shac API Contract & Policy, and 100% Coverage Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Go (for shac CLI)
+        uses: actions/setup-go@v5
+        with:
+          go-version: ">=1.22"
+          cache: false
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install ruff mypy pytest pytest-cov pytest-randomly
+          pip install -e .
+
+      - name: Install shac CLI (with Ubuntu 24.04 AppArmor userns fallback patch)
+        run: |
+          git clone --quiet https://github.com/shac-project/shac.git /tmp/shac-src
+          git -C /tmp/shac-src checkout --quiet 63c0571f70f71c533d5ce623fb30a4d8813f24af
+          git -C /tmp/shac-src apply "$GITHUB_WORKSPACE/nix/patches/shac-apparmor-userns-fallback.patch"
+          (cd /tmp/shac-src && go install .)
+          rm -rf /tmp/shac-src
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Format check (ruff format)
+        run: ruff format --check .
+
+      - name: Lint check (ruff check)
+        run: ruff check .
+
+      - name: Strict Typecheck (mypy)
+        run: mypy --strict src tests
+
+      - name: Shac Starlark Policy & API Contract Unit Tests (shac test)
+        run: shac test
+
+      - name: Shac Security, API Contract & Policy Qualifier (shac check --all)
+        run: shac check --all
+
+      - name: Run Test Suite Twice in Random Order with 100% Coverage Gate
+        run: |
+          pytest
+          pytest

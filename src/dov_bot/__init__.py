@@ -1,0 +1,85 @@
+"""
+Dov-Bot (Custom ArtBOT): Dov (The Bear) — Google L6 Technical Program Manager package.
+"""
+
+from dov_bot.analytics import (
+    PRIORITY_LEVELS,
+    CodingStyleProfile,
+    DovAnalyticsStore,
+    EpicEtaForecast,
+    IssueCycleRecord,
+    VelocitySummary,
+    default_repo_root,
+    default_upstream_pin_path,
+    load_upstream_artbot_pin,
+    seed_default_analytics,
+)
+from dov_bot.bear_alarm import (
+    BEAR_EMOJI,
+    BEAR_LEVEL_LABELS,
+    BEAR_REQUIRED_ACTIONS,
+    BearAssessment,
+    BearSignalInput,
+    evaluate_bear_urgency,
+    format_rox_bot_handoff,
+    ingest_rox_bot_anomaly,
+    render_bear_help_page,
+)
+from dov_bot.cli import build_parser, main
+from dov_bot.linear_sync import (
+    INNODATA_TEAM_ID,
+    INNODATA_TEAM_KEY,
+    INNODATA_TEAM_OVERVIEW_URL,
+    LINEAR_GRAPHQL_URL,
+    BoardAuditFinding,
+    BoardAuditReport,
+    HttpResponse,
+    HttpTransport,
+    LinearIssue,
+    LinearMember,
+    LinearOverviewManager,
+    LinearProject,
+    UrllibHttpTransport,
+    default_linear_snapshot,
+)
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "BEAR_EMOJI",
+    "BEAR_LEVEL_LABELS",
+    "BEAR_REQUIRED_ACTIONS",
+    "INNODATA_TEAM_ID",
+    "INNODATA_TEAM_KEY",
+    "INNODATA_TEAM_OVERVIEW_URL",
+    "LINEAR_GRAPHQL_URL",
+    "PRIORITY_LEVELS",
+    "BearAssessment",
+    "BearSignalInput",
+    "BoardAuditFinding",
+    "BoardAuditReport",
+    "CodingStyleProfile",
+    "DovAnalyticsStore",
+    "EpicEtaForecast",
+    "HttpResponse",
+    "HttpTransport",
+    "IssueCycleRecord",
+    "LinearIssue",
+    "LinearMember",
+    "LinearOverviewManager",
+    "LinearProject",
+    "UrllibHttpTransport",
+    "VelocitySummary",
+    "__version__",
+    "build_parser",
+    "default_linear_snapshot",
+    "default_repo_root",
+    "default_upstream_pin_path",
+    "evaluate_bear_urgency",
+    "format_rox_bot_handoff",
+    "ingest_rox_bot_anomaly",
+    "load_upstream_artbot_pin",
+    "main",
+    "render_bear_help_page",
+    "seed_default_analytics",
+]

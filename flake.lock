@@ -1,0 +1,45 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1785318670,
+        "narHash": "sha256-dN6Ou5x/+23FZLEpYP3IffO+NyJFzUlGumt1uu3MMaY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "0954f7ee2f6bb3dc7d4e3d0d8bcb8fd4bde4cfc5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "0954f7ee2f6bb3dc7d4e3d0d8bcb8fd4bde4cfc5",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "shac-src": "shac-src"
+      }
+    },
+    "shac-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790963685,
+        "narHash": "sha256-k+MYTQ5wp+ucT8CV2hZSxqnqjYjI6aY8tVZWztz+Xz0=",
+        "owner": "shac-project",
+        "repo": "shac",
+        "rev": "63c0571f70f71c533d5ce623fb30a4d8813f24af",
+        "type": "github"
+      },
+      "original": {
+        "owner": "shac-project",
+        "repo": "shac",
+        "rev": "63c0571f70f71c533d5ce623fb30a4d8813f24af",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
