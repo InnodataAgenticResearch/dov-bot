@@ -5,6 +5,7 @@ _LIVE_WEBHOOK_URL = r"https://default[a-z0-9]+\.[a-z0-9]+\.environment\.api\.pow
 _UNEXPLAINED_PRAGMA = r"#\s*(pragma:\s*no\s*cover|noqa(:[^\s-]+)?|type:\s*ignore(\[[^\]]+\])?)\s*$"
 _UNITTEST_MOCK = r"\b(unittest\.mock|from\s+unittest\s+import\s+mock)\b"
 _MAX_OLD_SPACE_SIZE = r"--max-old-space-size\b"
+_MUTABLE_BRIDGE_SERVICE_RE = r"(PYTHONPATH=[^\n]*%h/artbot/src|ExecStart=/usr/bin/python3\s+-m\s+artbot\.bridge)"
 
 _FORBIDDEN_FILES = {
     ".env": True,
@@ -157,6 +158,21 @@ def no_heap_limit_bandaids(ctx):
                     message = "Do not inflate V8 heap limits with --max-old-space-size (STANDARDS.md). Fix the underlying memory retention or streaming bottleneck instead.",
                 )
 
+def no_mutable_bridge_systemd_units(ctx):
+    """Forbid mutable PYTHONPATH=%h/artbot/src or ExecStart=/usr/bin/python3 -m artbot.bridge in *.service files."""
+    for path in ctx.scm.all_files(include_symlinks = True):
+        if not path.endswith(".service"):
+            continue
+        raw = str(ctx.io.read_file(path))
+        for idx, line in enumerate(raw.splitlines()):
+            if ctx.re.match(_MUTABLE_BRIDGE_SERVICE_RE, line):
+                ctx.emit.finding(
+                    level = "error",
+                    filepath = path,
+                    line = idx + 1,
+                    message = "Systemd service units must use immutable %h/.nix-profile/bin/artbot-bridge instead of mutable PYTHONPATH=%h/artbot/src or /usr/bin/python3 -m artbot.bridge.",
+                )
+
 def register_policy_checks():
     for impl in [
         no_secrets_or_env_files,
@@ -166,6 +182,7 @@ def register_policy_checks():
         no_unexplained_pragma_or_disable,
         no_unittest_mock_in_tests,
         no_heap_limit_bandaids,
+        no_mutable_bridge_systemd_units,
         readme_and_agent_contract,
     ]:
         shac.register_check(impl)

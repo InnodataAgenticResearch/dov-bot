@@ -1,0 +1,21 @@
+[Unit]
+Description=Dov-Bot (Custom ArtBOT) Microsoft Teams Mention-Gated Channel Bridge
+After=network-online.target hermes-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dov-bot
+Environment="PATH=%h/.nix-profile/bin:/nix/var/nix/profiles/default/bin:%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="ARTBOT_PROFILE_DIR=%h/.hermes/profiles/dovbot"
+EnvironmentFile=%h/.hermes/profiles/dovbot/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/.nix-profile/bin/artbot-bridge --daemon --host 0.0.0.0 --port 8658
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dovbot-teams-bridge
+
+[Install]
+WantedBy=default.target

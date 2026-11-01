@@ -49,12 +49,12 @@ def test_package_version_and_upstream_pin(tmp_path: Path) -> None:
     assert default_upstream_pin_path(tmp_path) == tmp_path / "UPSTREAM_ARTBOT.json"
 
     pin = load_upstream_artbot_pin()
-    assert pin["upstream_tag"] == "v0.1.0-artbot"
-    assert pin["upstream_commit"] == "e28cf26c2b71e4f081ce17f3815fae31375a98d3"
+    assert pin["upstream_tag"] == "v0.2.0-artbot"
+    assert pin["upstream_commit"] == "3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781"
 
     custom_pin = tmp_path / "custom_pin.json"
-    custom_pin.write_text('{"upstream_tag": "v0.1.0-artbot"}', encoding="utf-8")
-    assert load_upstream_artbot_pin(custom_pin)["upstream_tag"] == "v0.1.0-artbot"
+    custom_pin.write_text('{"upstream_tag": "v0.2.0-artbot"}', encoding="utf-8")
+    assert load_upstream_artbot_pin(custom_pin)["upstream_tag"] == "v0.2.0-artbot"
 
 
 def test_coding_style_profile_properties_and_sqlite_roundtrip(tmp_path: Path) -> None:
@@ -473,11 +473,11 @@ def test_cli_all_subcommands(tmp_path: Path) -> None:
     # 1. upstream-status text & JSON
     out = io.StringIO()
     assert main(["upstream-status"], stdout=out) == 0
-    assert "v0.1.0-artbot" in out.getvalue()
+    assert "v0.2.0-artbot" in out.getvalue()
 
     out_json = io.StringIO()
     assert main(["upstream-status", "--json"], stdout=out_json) == 0
-    assert json.loads(out_json.getvalue())["upstream_tag"] == "v0.1.0-artbot"
+    assert json.loads(out_json.getvalue())["upstream_tag"] == "v0.2.0-artbot"
 
     # 2. help-page stdout & --output file
     help_file = tmp_path / "docs" / "BEAR_ALARM_HELP.md"

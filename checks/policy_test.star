@@ -10,6 +10,7 @@ load(
     "no_curl_pipe_shell",
     "no_hardcoded_webhook_urls",
     "no_heap_limit_bandaids",
+    "no_mutable_bridge_systemd_units",
     "no_secrets_or_env_files",
     "no_tracked_beads",
     "no_unexplained_pragma_or_disable",
@@ -77,11 +78,22 @@ def test_readme_and_agent_contract():
 def test_no_heap_limit_bandaids():
     flag = "--max-old-" + "space-size=8192"
     res = testing.run(no_heap_limit_bandaids, files = {
-        "systemd/bad.service": "Environment=\"NODE_OPTIONS=" + flag + "\"\n",
+        "systemd/bad.service": 'Environment="NODE_OPTIONS=' + flag + '"\n',
         "systemd/good.service": "ExecStart=/usr/bin/node dist/index.js\n",
         "README.md": "Never use " + flag + "\n",
     })
     asserts.eq([(f.filepath, f.line) for f in res.findings], [("systemd/bad.service", 1)])
+
+def test_no_mutable_bridge_systemd_units():
+    res = testing.run(no_mutable_bridge_systemd_units, files = {
+        "systemd/bad_path.service": "Environment=PYTHONPATH=%h/dov-bot/src:%h/artbot/src\n",
+        "systemd/bad_exec.service": "ExecStart=/usr/bin/python3 -m artbot.bridge --daemon\n",
+        "systemd/good.service": "ExecStart=%h/.nix-profile/bin/artbot-bridge --daemon --host 0.0.0.0 --port 8658\n",
+    })
+    asserts.eq(
+        sorted([(f.filepath, f.line) for f in res.findings]),
+        [("systemd/bad_exec.service", 1), ("systemd/bad_path.service", 1)],
+    )
 
 def test_upstream_artbot_pin_valid():
     res_missing = testing.run(upstream_artbot_pin_valid, files = {
@@ -90,12 +102,12 @@ def test_upstream_artbot_pin_valid():
     asserts.eq(len(res_missing.findings), 1)
 
     res_bad = testing.run(upstream_artbot_pin_valid, files = {
-        "UPSTREAM_ARTBOT.json": '{"upstream_repo": "bad", "upstream_tag": "0.1.0", "upstream_commit": "short", "public_api_allowlist": []}\n',
+        "UPSTREAM_ARTBOT.json": '{"upstream_repo": "bad", "upstream_tag": "0.2.0", "upstream_commit": "short", "public_api_allowlist": []}\n',
     })
     asserts.eq(len(res_bad.findings), 4)
 
     res_good = testing.run(upstream_artbot_pin_valid, files = {
-        "UPSTREAM_ARTBOT.json": '{"upstream_repo": "https://github.com/InnodataAgenticResearch/artbot", "upstream_tag": "v0.1.0-artbot", "upstream_commit": "e28cf26c2b71e4f081ce17f3815fae31375a98d3", "public_api_allowlist": ["ArtbotConfig"]}\n',
+        "UPSTREAM_ARTBOT.json": '{"upstream_repo": "https://github.com/InnodataAgenticResearch/artbot", "upstream_tag": "v0.2.0-artbot", "upstream_commit": "3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781", "public_api_allowlist": ["ArtbotConfig"]}\n',
     })
     asserts.eq(len(res_good.findings), 0)
 
@@ -108,4 +120,14 @@ def test_no_private_artbot_apis():
     asserts.eq(
         sorted([(f.filepath, f.line) for f in res.findings]),
         [("src/dov_bot/bad_priv.py", 1), ("src/dov_bot/bad_sub.py", 1)],
+    )
+
+    res_allowlist = testing.run(no_private_artbot_apis, files = {
+        "UPSTREAM_ARTBOT.json": '{"upstream_repo": "https://github.com/InnodataAgenticResearch/artbot", "upstream_tag": "v0.2.0-artbot", "upstream_commit": "3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781", "public_api_allowlist": ["ArtbotConfig", "HttpTransport"]}\n',
+        "src/dov_bot/unlisted.py": "from artbot import ArtbotConfig, UnlistedSymbol\n",
+        "src/dov_bot/good.py": "from artbot import ArtbotConfig, HttpTransport\n",
+    })
+    asserts.eq(
+        [(f.filepath, f.line) for f in res_allowlist.findings],
+        [("src/dov_bot/unlisted.py", 1)],
     )

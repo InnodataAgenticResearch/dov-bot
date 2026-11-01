@@ -2,7 +2,7 @@
 
 This file governs autonomous coding agents (Hermes Agent, Claude Code, Codex) and engineers working in or deploying from the `dov-bot` repository.
 
-`dov-bot` (**Dov — The Bear**) is a **Custom ArtBOT** built on top of the reusable upstream [`InnodataAgenticResearch/artbot`](https://github.com/InnodataAgenticResearch/artbot) foundation (`v0.1.0-artbot`). Dov operates as a **Google L6 Technical Program Manager (TPM)** governing Linear board hygiene (`https://linear.app/innodata-ai/team/INN/overview`), repository coding-style and cycle-time analytics (`DovAnalyticsStore`), cross-bot peer escalation with `@rox-bot` (`@ops-bot`), and the **0-to-5 Bear Alarm Urgency Protocol**.
+`dov-bot` (**Dov — The Bear**) is a **Custom ArtBOT** built on top of the reusable upstream [`InnodataAgenticResearch/artbot`](https://github.com/InnodataAgenticResearch/artbot) foundation (`v0.2.0-artbot`). Dov operates as a **Google L6 Technical Program Manager (TPM)** governing Linear board hygiene (`https://linear.app/innodata-ai/team/INN/overview`), repository coding-style and cycle-time analytics (`DovAnalyticsStore`), cross-bot peer escalation with `@rox-bot` (`@ops-bot`), and the **0-to-5 Bear Alarm Urgency Protocol**.
 
 ---
 
@@ -10,7 +10,7 @@ This file governs autonomous coding agents (Hermes Agent, Claude Code, Codex) an
 
 - `README.md`: Overview of Dov-Bot's TPM capabilities, 0-to-5 Bear Alarm Urgency Protocol summary, Microsoft Teams Workflows webhook setup, and CLI execution commands.
 - `BEAR_ALARM_HELP.md`: Full specification of the **0-to-5 Bear Alarm Urgency Protocol** (`0` bears = zero bear emojis; `1`–`5` bears = `🐻` to `🐻🐻🐻🐻🐻` **5-ALARM FIRE!**) and `@rox-bot` (`@ops-bot`) cross-bot escalation rules.
-- `UPSTREAM_ARTBOT.json` & `checks/api_contract.star`: Upstream ArtBOT version pin (`v0.1.0-artbot`, commit `e28cf26c2b71e4f081ce17f3815fae31375a98d3`) and the public API surface lock enforced by `shac`.
+- `UPSTREAM_ARTBOT.json` & `checks/api_contract.star`: Upstream ArtBOT version pin (`v0.2.0-artbot`, commit `3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781`) and the public API surface lock enforced by `shac`.
 - `config/PERSONA.md`: Dov-Bot's Google L6 TPM identity (`@dov-bot` / `@tpm-bot`), Linear (`INN-*`) + Beads (`bd`) auditing workflow, and `STANDARDS.md`.
 - `checks/policy.star` & `shac.star`: Machine-enforced security, secret-hygiene, API-contract, and coding-standard gates.
 
@@ -21,7 +21,7 @@ This file governs autonomous coding agents (Hermes Agent, Claude Code, Codex) an
 When asked by a human to provision `dov-bot` (or another custom Teams webhook bot extending upstream `artbot`) on a machine:
 
 1. **Verify Upstream ArtBOT Pin (`UPSTREAM_ARTBOT.json` & `checks/api_contract.star`):**
-   - `dov-bot` pins upstream `https://github.com/InnodataAgenticResearch/artbot` at tag `v0.1.0-artbot` (`e28cf26c2b71e4f081ce17f3815fae31375a98d3`) in `UPSTREAM_ARTBOT.json`.
+   - `dov-bot` pins upstream `https://github.com/InnodataAgenticResearch/artbot` at tag `v0.2.0-artbot` (`3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781`) in `UPSTREAM_ARTBOT.json`.
    - Custom ArtBOT code under `src/dov_bot/` must import **only** from the top-level public `artbot` package (`from artbot import ArtbotConfig, HttpTransport, ...`) listed in `public_api_allowlist`.
    - `checks/api_contract.star` (`no_private_artbot_apis` and `upstream_artbot_pin_valid`) blocks any import of internal submodules (`from artbot.<submodule> import ...`) or private underscore-prefixed symbols (`from artbot import _...`), guaranteeing that upgrading to a newer tagged `artbot` release never breaks `dov-bot`.
    - Verify the pin at any time with:

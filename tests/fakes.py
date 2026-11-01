@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dov_bot.linear_sync import HttpResponse
+from artbot import HttpResponse
 
 
 class FakeHttpTransport:
@@ -15,8 +15,10 @@ class FakeHttpTransport:
     def __init__(self) -> None:
         self.get_calls: list[dict[str, Any]] = []
         self.post_json_calls: list[dict[str, Any]] = []
+        self.patch_json_calls: list[dict[str, Any]] = []
         self.get_responses: list[HttpResponse] = []
         self.post_responses: list[HttpResponse] = []
+        self.patch_responses: list[HttpResponse] = []
 
     def queue_get_response(self, status_code: int, body: str = "{}") -> None:
         """Queue an HTTP response for the next `get` call."""
@@ -25,6 +27,10 @@ class FakeHttpTransport:
     def queue_post_response(self, status_code: int, body: str = "{}") -> None:
         """Queue an HTTP response for the next `post_json` call."""
         self.post_responses.append(HttpResponse(status_code=status_code, body=body))
+
+    def queue_patch_response(self, status_code: int, body: str = "{}") -> None:
+        """Queue an HTTP response for the next `patch_json` call."""
+        self.patch_responses.append(HttpResponse(status_code=status_code, body=body))
 
     def get(
         self,
@@ -65,3 +71,24 @@ class FakeHttpTransport:
         if not self.post_responses:
             return HttpResponse(status_code=200, body="{}")
         return self.post_responses.pop(0)
+
+    def patch_json(
+        self,
+        url: str,
+        *,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> HttpResponse:
+        """Record a PATCH JSON request and return the next queued `HttpResponse`."""
+        self.patch_json_calls.append(
+            {
+                "url": url,
+                "payload": payload,
+                "headers": headers,
+                "timeout": timeout,
+            }
+        )
+        if not self.patch_responses:
+            return HttpResponse(status_code=200, body="{}")
+        return self.patch_responses.pop(0)

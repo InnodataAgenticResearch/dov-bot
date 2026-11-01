@@ -15,6 +15,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from artbot import PeerBlackboardHandoff, build_peer_blackboard_block
+
 BEAR_EMOJI = "🐻"
 
 BEAR_LEVEL_LABELS: dict[int, str] = {
@@ -87,12 +89,32 @@ def format_rox_bot_handoff(
     clamped = max(3, min(5, level))
     bears = BEAR_EMOJI * clamped
     detail_suffix = f" — {detail.strip()}" if detail.strip() else ""
+    blackboard_block = build_peer_blackboard_block(
+        PeerBlackboardHandoff(
+            handoff_id=f"{issue_id}-{vm_or_service}",
+            source_agent="dov-bot",
+            target_agent="rox-bot",
+            status="escalated",
+            task_summary=f"{clamped}-Bear Alarm on {vm_or_service}{detail_suffix}",
+            context={
+                "issue_id": issue_id,
+                "vm_or_service": vm_or_service,
+                "bear_level": clamped,
+                "detail": detail.strip(),
+            },
+            updated_at="2026-11-01T00:00:00Z",
+        )
+    )
     return (
-        f"{bears} @rox-bot (@ops-bot) [TPM Peer Escalation | {issue_id} | {clamped}-Bear Alarm]: "
+        f"{bears} @rox-bot (@ops-bot) [TPM Peer Escalation | {issue_id} | {clamped}-Bear Alarm | "
+        f"Blackboard `{blackboard_block.block_id}` (`{blackboard_block.schema}`)]: "
         f"Infrastructure/VM blocker detected on `{vm_or_service}`{detail_suffix}. "
         "Please run health diagnostics and report remediation ETA so Dov can "
         "update the Linear board."
     )
+
+
+format_rox_handoff = format_rox_bot_handoff
 
 
 def evaluate_bear_urgency(

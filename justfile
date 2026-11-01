@@ -44,16 +44,16 @@ test:
 
 # Verify upstream ArtBOT tag and commit pin
 upstream-status:
-	PYTHONPATH=src python3 -m dov_bot.cli upstream-status
+	PYTHONPATH=src:../artbot/src python3 -m dov_bot.cli upstream-status
 
 # Render the Bear Alarm Urgency Protocol help page
 help-page:
-	PYTHONPATH=src python3 -m dov_bot.cli help-page
+	PYTHONPATH=src:../artbot/src python3 -m dov_bot.cli help-page
 
 # Run deterministic velocity and epic ETA report
 velocity-report:
-	PYTHONPATH=src python3 -m dov_bot.cli velocity-report --seed
+	PYTHONPATH=src:../artbot/src python3 -m dov_bot.cli velocity-report --seed
 
 # Audit Linear team board and active workstreams
 audit-linear:
-	PYTHONPATH=src python3 -m dov_bot.cli audit-linear
+	PYTHONPATH=src:../artbot/src python3 -m dov_bot.cli audit-linear

@@ -1,10 +1,10 @@
 # Dov-Bot (Custom ArtBOT) — Dov (The Bear), Google L6 Technical Program Manager
 
-**Dov-Bot** (`@dov-bot` / `@tpm-bot`) is a custom [ArtBOT](https://github.com/InnodataAgenticResearch/artbot) instance (`v0.1.0-artbot`) built for **Innodata Agentic Research**. Named **Dov** (Hebrew for *"The Bear"*), he operates as a **Google L6 Technical Program Manager (TPM)** governing the **Innodata Linear workspace** (`https://linear.app/innodata-ai/team/INN/overview`, team key `INN`, ID `829852d8-8a12-4875-93bd-5d1d1e08fe0b`), repository coding-style and cycle-time analytics, cross-bot coordination with `@rox-bot` (`@ops-bot`), and the [**0-to-5 Bear Alarm Urgency Protocol**](BEAR_ALARM_HELP.md).
+**Dov-Bot** (`@dov-bot` / `@tpm-bot`) is a custom [ArtBOT](https://github.com/InnodataAgenticResearch/artbot) instance (`v0.2.0-artbot`) built for **Innodata Agentic Research**. Named **Dov** (Hebrew for *"The Bear"*), he operates as a **Google L6 Technical Program Manager (TPM)** governing the **Innodata Linear workspace** (`https://linear.app/innodata-ai/team/INN/overview`, team key `INN`, ID `829852d8-8a12-4875-93bd-5d1d1e08fe0b`), repository coding-style and cycle-time analytics, cross-bot coordination with `@rox-bot` (`@ops-bot`), and the [**0-to-5 Bear Alarm Urgency Protocol**](BEAR_ALARM_HELP.md).
 
 ## 1. Key Capabilities & Operating Invariants
 
-1. **Upstream ArtBOT Public Contract Lock (`UPSTREAM_ARTBOT.json`):** Pins `InnodataAgenticResearch/artbot` at tag `v0.1.0-artbot` (`e28cf26c2b71e4f081ce17f3815fae31375a98d3`). `checks/api_contract.star` forbids importing private `artbot` submodules or underscore-prefixed symbols.
+1. **Upstream ArtBOT Public Contract Lock (`UPSTREAM_ARTBOT.json`):** Pins `InnodataAgenticResearch/artbot` at tag `v0.2.0-artbot` (`3cfa4e8d2ed6c30c51f03c7a92b58df0a694c781`). `checks/api_contract.star` forbids importing private `artbot` submodules or underscore-prefixed symbols.
 2. **Isolated SQLite Velocity & Coding-Style Analytics (`src/dov_bot/analytics.py`):**
    - `DovAnalyticsStore` persists repository coding-style profiles (commit granularity, test-to-code ratio, pure dependency injection vs. mock usage, PR turnaround hours, and new-project scaffolding velocity vs. existing-repo iteration velocity).
    - Tracks Beads (`bd`) and Linear (`INN-*`) issue cycle times (`open` -> `in_progress` -> `closed`), completion velocity by priority (`P0`–`P4`) and phase, and deterministic ETA forecasts for open epics.

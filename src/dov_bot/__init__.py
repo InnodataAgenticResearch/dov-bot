@@ -2,6 +2,14 @@
 Dov-Bot (Custom ArtBOT): Dov (The Bear) — Google L6 Technical Program Manager package.
 """
 
+from artbot import (
+    HttpResponse,
+    HttpTransport,
+    PeerBlackboardHandoff,
+    UrllibHttpTransport,
+    build_peer_blackboard_block,
+)
+
 from dov_bot.analytics import (
     DEFAULT_LOCAL_REPOS,
     PRIORITY_LEVELS,
@@ -28,6 +36,7 @@ from dov_bot.bear_alarm import (
     BearSignalInput,
     evaluate_bear_urgency,
     format_rox_bot_handoff,
+    format_rox_handoff,
     ingest_rox_bot_anomaly,
     render_bear_help_page,
 )
@@ -39,13 +48,10 @@ from dov_bot.linear_sync import (
     LINEAR_GRAPHQL_URL,
     BoardAuditFinding,
     BoardAuditReport,
-    HttpResponse,
-    HttpTransport,
     LinearIssue,
     LinearMember,
     LinearOverviewManager,
     LinearProject,
-    UrllibHttpTransport,
     default_linear_snapshot,
     extract_beads_id,
 )
@@ -77,10 +83,12 @@ __all__ = [
     "LinearOverviewManager",
     "LinearProject",
     "LiveSyncSummary",
+    "PeerBlackboardHandoff",
     "UrllibHttpTransport",
     "VelocitySummary",
     "__version__",
     "build_parser",
+    "build_peer_blackboard_block",
     "default_linear_snapshot",
     "default_repo_root",
     "default_upstream_pin_path",
@@ -88,6 +96,7 @@ __all__ = [
     "evaluate_bear_urgency",
     "extract_beads_id",
     "format_rox_bot_handoff",
+    "format_rox_handoff",
     "harvest_beads_jsonl",
     "harvest_git_repo_profile",
     "ingest_rox_bot_anomaly",
