@@ -4,7 +4,7 @@
 
 ## 1. Key Capabilities & Operating Invariants
 
-1. **Upstream ArtBOT Public Contract Lock (`UPSTREAM_ARTBOT.json`):** Pins `InnodataAgenticResearch/artbot` at tag `v0.2.0-artbot` (`6c63513a9f92887aa13ddd7f562e82eb32e87873`). `checks/api_contract.star` forbids importing private `artbot` submodules or underscore-prefixed symbols.
+1. **Upstream ArtBOT Public Contract Lock (`UPSTREAM_ARTBOT.json`):** Pins `InnodataAgenticResearch/artbot` at tag `v0.2.0-artbot` (`b3fbc3b87fd7b1e561f1d78f179ba31dcf64cb81`). `checks/api_contract.star` forbids importing private `artbot` submodules or underscore-prefixed symbols.
 2. **Isolated SQLite Velocity & Coding-Style Analytics (`src/dov_bot/analytics.py`):**
    - `DovAnalyticsStore` persists repository coding-style profiles (commit granularity, test-to-code ratio, pure dependency injection vs. mock usage, PR turnaround hours, and new-project scaffolding velocity vs. existing-repo iteration velocity).
    - Tracks Beads (`bd`) and Linear (`INN-*`) issue cycle times (`open` -> `in_progress` -> `closed`), completion velocity by priority (`P0`–`P4`) and phase, and deterministic ETA forecasts for open epics.
