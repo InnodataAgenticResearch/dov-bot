@@ -23,12 +23,12 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-mypy_path = ["src", "../artbot/src"]
+mypy_path = ["src", "../artbot/src", "vendor"]
 files = ["src", "tests"]
 explicit_package_bases = true
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "../artbot/src", "."]
+pythonpath = ["src", ".", "../artbot/src", "vendor"]
 testpaths = ["tests"]
 addopts = "-p randomly --cov=dov_bot --cov-branch --cov-report=term-missing --cov-fail-under=100"
 

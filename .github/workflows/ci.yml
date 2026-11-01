@@ -23,10 +23,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout upstream ArtBOT v0.2.0-artbot
-        run: |
-          git clone --quiet --branch v0.2.0-artbot --depth 1 https://github.com/InnodataAgenticResearch/artbot.git ../artbot
-
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -42,7 +38,7 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           pip install ruff mypy pytest pytest-cov pytest-randomly
-          pip install git+https://github.com/InnodataAgenticResearch/artbot.git@v0.2.0-artbot
+          GIT_TERMINAL_PROMPT=0 pip install git+https://github.com/InnodataAgenticResearch/artbot.git@v0.2.0-artbot || true
           pip install -e .
 
       - name: Install shac CLI (with Ubuntu 24.04 AppArmor userns fallback patch)
